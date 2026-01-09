@@ -4,51 +4,38 @@ import pandas as pd
 
 def fetch_jobs(search_term, location, hours_old):
     """
-    Updated for JobSpy v1.1.60+ compatibility.
+    Individually scrapes sites so that if one (like Glassdoor) fails, 
+    the others still return results.
     """
-    st.toast(f"Searching for {search_term}...")
-    
-    # Handle Remote Logic
-    is_remote = False
-    loc = location
-    if location and "remote" in location.lower():
-        is_remote = True
-        loc = location.lower().replace("remote", "").strip()
+    is_remote = "remote" in location.lower() if location else False
+    loc = location.lower().replace("remote", "").strip() if location else "USA"
 
-    # Use cloud-friendly sources
-    safe_sources = ["zip_recruiter", "glassdoor"]
+    all_results = []
+    # We try these one by one to isolate errors
+    sites_to_try = ["zip_recruiter", "glassdoor", "indeed"]
 
-    try:
-        # CRITICAL UPDATE: Using 'hours_to_look_back' instead of 'hours_old'
-        jobs_df = scrape_jobs(
-            site_name=safe_sources,
-            search_term=search_term,
-            location=loc,
-            results_wanted=15,
-            hours_to_look_back=hours_old, # <--- THIS IS THE FIX
-            is_remote=is_remote,
-            enforce_desktop_browser=True
-        )
-        
-        if jobs_df is not None and not jobs_df.empty:
-            return jobs_df
-            
-    except TypeError as e:
-        # If even 'hours_to_look_back' fails, we run without the time filter
-        # This guarantees the app won't crash, even if the filter is ignored
-        st.warning("⚠️ Version conflict detected. Running search without time filter.")
+    for site in sites_to_try:
         try:
-            return scrape_jobs(
-                site_name=safe_sources,
+            # Attempt scraping for a single site
+            res = scrape_jobs(
+                site_name=[site],
                 search_term=search_term,
                 location=loc,
-                results_wanted=15,
-                is_remote=is_remote
+                results_wanted=10,
+                is_remote=is_remote,
+                # We use a very high timeout for cloud stability
+                timeout=20 
             )
-        except Exception as e2:
-             st.error(f"Critical Scraper Error: {e2}")
+            if res is not None and not res.empty:
+                all_results.append(res)
+        except Exception as e:
+            # We log the error but CONTINUE to the next site
+            print(f"Log: {site} failed with error {e}")
+            continue 
 
-    except Exception as e:
-        st.error(f"Scraper Error: {e}")
-        
+    # Combine all successful results
+    if all_results:
+        final_df = pd.concat(all_results, ignore_index=True)
+        return final_df
+    
     return None
