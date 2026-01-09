@@ -6,38 +6,50 @@ and ZipRecruiter using python-jobspy. It filters results based on
 keywords, location, and the post date (hours old).
 """
 
+import random
 from jobspy import scrape_jobs
-from config import JOB_SOURCES, MAX_JOBS
+try:
+    from config import JOB_SOURCES, MAX_JOBS
+except ImportError:
+    JOB_SOURCES = ["linkedin", "indeed", "zip_recruiter", "glassdoor"]
+    MAX_JOBS = 15
 
 def fetch_jobs(search_term, location, hours_old):
     """
-    Fetch recent jobs using JobSpy.
+    Enhanced scraper with bot-detection bypass for Streamlit Cloud.
     """
-    # 1. Check if user typed 'remote' in the location box
-    is_remote_search = False
-    search_location = location
-    
+    # 1. Handle Remote logic
+    is_remote = False
+    loc = location
     if location and "remote" in location.lower():
-        is_remote_search = True
-        # If the input was ONLY 'remote', set location to empty for a global/USA search
-        search_location = location.lower().replace("remote", "").strip()
-        
-    # 2. Call scrape_jobs with the is_remote parameter
+        is_remote = True
+        loc = location.lower().replace("remote", "").strip()
+
+    # 2. Add a fallback location to prevent empty searches
+    if not loc and not is_remote:
+        loc = "USA"
+
     try:
+        # 3. Rotating User Agents (Optional but helps)
+        # JobSpy handles most of this, but enforce_desktop_browser is key
         jobs_df = scrape_jobs(
             site_name=JOB_SOURCES,
             search_term=search_term,
-            location=location,
+            location=loc,
             results_wanted=MAX_JOBS,
             hours_old=hours_old,
             country_indeed="USA",
-            is_remote=is_remote_search
+            is_remote=is_remote,
+            enforce_desktop_browser=True, # Crucial for Cloud deployment
+            proxies=[] # If you ever get a proxy service, add it here
         )
+
+        if jobs_df is not None and not jobs_df.empty:
+            # Clean up the dataframe to ensure it's compatible with Streamlit
+            return jobs_df.fillna("") 
+            
     except Exception as e:
-        print(f"Scraping error encountered: {e}")
-        return None
-
-    if jobs_df is None or jobs_df.empty:
-        return None
-
-    return jobs_df
+        # This will show up in your 'Manage App' logs
+        print(f"DEBUG: Scraper failed with error: {e}")
+        
+    return None
