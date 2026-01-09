@@ -3,30 +3,46 @@ from jobspy import scrape_jobs
 import pandas as pd
 
 def fetch_jobs(search_term, location, hours_old):
+    """
+    Fetches jobs with 'Safe Mode' defaults for Cloud Deployment.
+    Excludes Indeed/LinkedIn by default to prevent IP blocking crashes.
+    """
     is_remote = "remote" in location.lower() if location else False
     loc = location.lower().replace("remote", "").strip() if location else "USA"
 
-    # Step 1: Start with ONLY the most basic, universal arguments
+    # 1. USE ONLY CLOUD-FRIENDLY SOURCES
+    # Indeed and LinkedIn almost always block Streamlit Cloud IPs.
+    # ZipRecruiter and Glassdoor are much more reliable without proxies.
+    safe_sources = ["zip_recruiter", "glassdoor"]
+    
+    # 2. Base Arguments
     search_args = {
-        "site_name": ["indeed", "zip_recruiter", "linkedin"],
+        "site_name": safe_sources,
         "search_term": search_term,
         "location": loc,
-        "results_wanted": 10,
-        "is_remote": is_remote
+        "results_wanted": 15,
+        "is_remote": is_remote,
+        # 'country_indeed' is removed since we aren't scraping Indeed
     }
 
+    st.toast(f"Searching {', '.join(safe_sources)}...")
+
     try:
-        # Step 2: Try to run with the time filter (hours_to_look_back)
-        return scrape_jobs(**search_args, hours_to_look_back=hours_old)
-    except TypeError:
+        # 3. Attempt to scrape
+        # We try the new parameter first, then fallback
         try:
-            # Step 3: Try the older time filter (hours_old)
-            return scrape_jobs(**search_args, hours_old=hours_old)
+            return scrape_jobs(**search_args, hours_to_look_back=hours_old)
         except TypeError:
-            # Step 4: Final Fallback - No time filter, No extra flags
-            # This is the "Safe Mode" that should never throw a TypeError
-            st.info("🔍 Running in compatibility mode...")
-            return scrape_jobs(**search_args)
+            return scrape_jobs(**search_args, hours_old=hours_old)
+            
     except Exception as e:
-        st.error(f"Scraper error: {str(e)}")
+        # 4. Graceful Error Handling (Prevents the "Red Screen of Death")
+        error_msg = str(e).lower()
+        if "indeed" in error_msg:
+            st.error("Indeed blocked the connection. Switched to other sources.")
+        elif "linkedin" in error_msg:
+            st.error("LinkedIn blocked the connection. Switched to other sources.")
+        else:
+            st.error(f"Could not fetch jobs: {e}")
+        
         return None
