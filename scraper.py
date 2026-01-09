@@ -1,3 +1,11 @@
+"""
+scraper.py
+-----------
+Responsible for fetching recent jobs from LinkedIn and Indeed
+using python-jobspy. It filters results based on 
+keywords, location, and the post date (hours old).
+"""
+
 import streamlit as st
 from jobspy import scrape_jobs
 import pandas as pd
