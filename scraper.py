@@ -4,45 +4,36 @@ import pandas as pd
 
 def fetch_jobs(search_term, location, hours_old):
     """
-    Fetches jobs with 'Safe Mode' defaults for Cloud Deployment.
-    Excludes Indeed/LinkedIn by default to prevent IP blocking crashes.
+    Stable scraper linked to jobspy==1.1.35
     """
-    is_remote = "remote" in location.lower() if location else False
-    loc = location.lower().replace("remote", "").strip() if location else "USA"
-
-    # 1. USE ONLY CLOUD-FRIENDLY SOURCES
-    # Indeed and LinkedIn almost always block Streamlit Cloud IPs.
-    # ZipRecruiter and Glassdoor are much more reliable without proxies.
-    safe_sources = ["zip_recruiter", "glassdoor"]
+    st.toast(f"Searching for {search_term}...")
     
-    # 2. Base Arguments
-    search_args = {
-        "site_name": safe_sources,
-        "search_term": search_term,
-        "location": loc,
-        "results_wanted": 15,
-        "is_remote": is_remote,
-        # 'country_indeed' is removed since we aren't scraping Indeed
-    }
+    # Handle Remote Logic
+    is_remote = False
+    loc = location
+    if location and "remote" in location.lower():
+        is_remote = True
+        loc = location.lower().replace("remote", "").strip()
 
-    st.toast(f"Searching {', '.join(safe_sources)}...")
+    # Define safe sources (Indeed blocks cloud IPs, so we skip it)
+    safe_sources = ["zip_recruiter", "glassdoor"]
 
     try:
-        # 3. Attempt to scrape
-        # We try the new parameter first, then fallback
-        try:
-            return scrape_jobs(**search_args, hours_to_look_back=hours_old)
-        except TypeError:
-            return scrape_jobs(**search_args, hours_old=hours_old)
+        # We use 'hours_old' because we pinned jobspy==1.1.35 in requirements.txt
+        jobs_df = scrape_jobs(
+            site_name=safe_sources,
+            search_term=search_term,
+            location=loc,
+            results_wanted=15,
+            hours_old=hours_old, 
+            is_remote=is_remote,
+            country_indeed="USA"
+        )
+        
+        if jobs_df is not None and not jobs_df.empty:
+            return jobs_df
             
     except Exception as e:
-        # 4. Graceful Error Handling (Prevents the "Red Screen of Death")
-        error_msg = str(e).lower()
-        if "indeed" in error_msg:
-            st.error("Indeed blocked the connection. Switched to other sources.")
-        elif "linkedin" in error_msg:
-            st.error("LinkedIn blocked the connection. Switched to other sources.")
-        else:
-            st.error(f"Could not fetch jobs: {e}")
+        st.error(f"Scraper Error: {e}")
         
-        return None
+    return None
