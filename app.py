@@ -67,7 +67,7 @@ if search_button:
     with st.spinner("Step 1: Parsing Resume..."):
         st.session_state.resume_text = extract_resume_text(resume_file)
 
-    with st.spinner("Step 2: Sceaching Jobs (LinkedIn, Indeed, ZipRecruiter, Glassdoor)..."):
+    with st.spinner("Step 2: Sceaching Jobs "):
         jobs_df = fetch_jobs(search_term, location, hours_old)
 
     if jobs_df is not None and not jobs_df.empty:
