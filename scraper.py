@@ -1,42 +1,43 @@
 """
 scraper.py
 -----------
-Enhanced version for Cloud Debugging.
+Robust version with increased timeout and retry logic.
 """
 import streamlit as st
 from jobspy import scrape_jobs
 import pandas as pd
 
 def fetch_jobs(search_term, location, hours_old):
-    # Debug message visible on the app screen
-    st.toast(f"🔍 Searching {search_term} in {location}...")
-    
     is_remote = "remote" in location.lower() if location else False
     loc = location.lower().replace("remote", "").strip() if location else "USA"
 
-    try:
-        # We start with a very small request to see if it passes
-        jobs_df = scrape_jobs(
-            site_name=["indeed", "zip_recruiter"], # Temporarily removed LinkedIn for testing
-            search_term=search_term,
-            location=loc,
-            results_wanted=5, 
-            hours_old=hours_old,
-            country_indeed="USA",
-            is_remote=is_remote,
-            enforce_desktop_browser=True,
-            verbose=2 
-        )
-        
-        if jobs_df is not None and not jobs_df.empty:
-            st.sidebar.success(f"Fetched {len(jobs_df)} jobs!")
-            return jobs_df
-        else:
-            # This will show up in your 'Manage App' logs
-            print(f"DEBUG LOG: Scraper returned 0 results for {search_term}")
+    # Try up to 2 times if there's a timeout
+    for attempt in range(2):
+        try:
+            jobs_df = scrape_jobs(
+                site_name=["indeed", "zip_recruiter", "linkedin"], 
+                search_term=search_term,
+                location=loc,
+                results_wanted=15,
+                hours_to_look_back=hours_old,
+                country_indeed="USA",
+                is_remote=is_remote,
+                enforce_desktop_browser=True,
+                timeout=30, # Increased from default 10s to 30s
+                verbose=2 
+            )
             
-    except Exception as e:
-        st.error(f"Scraper encountered a technical error: {str(e)}")
-        print(f"CRITICAL ERROR: {e}")
-        
+            if jobs_df is not None and not jobs_df.empty:
+                return jobs_df
+            break # Exit loop if request finishes but is empty
+
+        except Exception as e:
+            # Check specifically for timeout in the error message
+            if "timeout" in str(e).lower() and attempt == 0:
+                st.toast("⚠️ Connection slow, retrying...")
+                continue # Try one more time
+            else:
+                st.error(f"Scraper technical error: {str(e)}")
+                break
+                
     return None
