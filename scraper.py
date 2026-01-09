@@ -1,41 +1,42 @@
 """
 scraper.py
 -----------
-Responsible for fetching recent jobs from LinkedIn, Indeed, Glassdoor
-and ZipRecruiter using python-jobspy. It filters results based on 
-keywords, location, and the post date (hours old).
+Enhanced version for Cloud Debugging.
 """
-
+import streamlit as st
 from jobspy import scrape_jobs
+import pandas as pd
 
 def fetch_jobs(search_term, location, hours_old):
-    # (Remote logic stays the same...)
+    # Debug message visible on the app screen
+    st.toast(f"🔍 Searching {search_term} in {location}...")
+    
     is_remote = "remote" in location.lower() if location else False
-    loc = location.lower().replace("remote", "").strip() if location else ""
+    loc = location.lower().replace("remote", "").strip() if location else "USA"
 
     try:
-        # We add verbose=2 to see the "Under the hood" logs
+        # We start with a very small request to see if it passes
         jobs_df = scrape_jobs(
-            site_name=["linkedin", "indeed", "zip_recruiter"],
+            site_name=["indeed", "zip_recruiter"], # Temporarily removed LinkedIn for testing
             search_term=search_term,
-            location=loc or "USA",
-            results_wanted=15,
+            location=loc,
+            results_wanted=5, 
             hours_old=hours_old,
             country_indeed="USA",
             is_remote=is_remote,
             enforce_desktop_browser=True,
-            verbose=2  # <--- CRITICAL DEBUG LINE
+            verbose=2 
         )
         
-        # Check if the dataframe is truly empty or just None
-        if jobs_df is not None:
-            print(f"DEBUG: Scraper returned {len(jobs_df)} rows.")
-            if not jobs_df.empty:
-                return jobs_df
+        if jobs_df is not None and not jobs_df.empty:
+            st.sidebar.success(f"Fetched {len(jobs_df)} jobs!")
+            return jobs_df
         else:
-            print("DEBUG: Scraper returned None Type.")
-
+            # This will show up in your 'Manage App' logs
+            print(f"DEBUG LOG: Scraper returned 0 results for {search_term}")
+            
     except Exception as e:
-        print(f"CRITICAL ERROR in Scraper: {e}")
+        st.error(f"Scraper encountered a technical error: {str(e)}")
+        print(f"CRITICAL ERROR: {e}")
         
     return None
