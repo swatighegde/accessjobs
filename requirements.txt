@@ -1,0 +1,7 @@
+numpy>=1.26.0
+pandas
+streamlit
+python-jobspy
+pdfplumber
+groq
+
