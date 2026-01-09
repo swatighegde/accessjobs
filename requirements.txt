@@ -2,7 +2,7 @@ numpy>=1.26.0
 pandas
 python-dotenv
 streamlit
-python-jobspy
+python-jobspy>=1.1.61
 pdfplumber
 groq
 
