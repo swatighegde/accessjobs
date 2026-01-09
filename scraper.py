@@ -7,49 +7,54 @@ def fetch_jobs(search_term, location, hours_old):
     is_remote = "remote" in location.lower() if location else False
     loc = location.lower().replace("remote", "").strip() if location else "USA"
 
-    # 1. ADD LINKEDIN BACK TO THE LIST
-    sites = [ "glassdoor", "linkedin", "indeed"]
+    # LinkedIn and Glassdoor REQUIRE proxies on Streamlit Cloud.
+    # Without a proxy, they will almost always return 0 results or 403 error.
+    sites = ["indeed", "linkedin", "glassdoor"]
     all_jobs = []
-
-    # 2. INCREASE COUNT TO 100 (Handled in batches to avoid 403/Timeout)
-    # Most job boards serve 25 jobs per page. We do 4 "pages".
+    
+    # We will fetch in 4 batches of 25 to reach 100 jobs total
     results_per_batch = 25
-    total_batches = 4 
+    total_batches = 4
+
+    # --- PROXY CONFIGURATION ---
+    # You can get a free/cheap residential proxy from sites like Webshare or ProxyScrape.
+    # Format: "http://username:password@ip:port"
+    # my_proxies = ["http://your_proxy_here"] 
+    # ---------------------------
 
     progress_bar = st.progress(0)
-    status_text = st.empty()
 
     for i in range(total_batches):
-        status_text.text(f"Fetching batch {i+1} of {total_batches}...")
         try:
-            # We use 'offset' to get the next set of 25 jobs
-            jobs = scrape_jobs(
+            # Use 'offset' to get the next page of results
+            batch_df = scrape_jobs(
                 site_name=sites,
                 search_term=search_term,
                 location=loc,
                 results_wanted=results_per_batch,
-                offset=i * results_per_batch, 
+                offset=i * results_per_batch, # Page 1: 0, Page 2: 25...
                 hours_to_look_back=hours_old,
                 is_remote=is_remote,
-                enforce_desktop_browser=True, # Essential for Cloud
-                verbose=0
-                # PRO TIP: If you have a proxy, add: proxies=["user:pass@host:port"]
+                enforce_desktop_browser=True, # Helps with LinkedIn
+                # proxies=my_proxies, # Uncomment this if you get a proxy
+                timeout=30
             )
 
-            if jobs is not None and not jobs.empty:
-                all_jobs.append(jobs)
+            if batch_df is not None and not batch_df.empty:
+                all_jobs.append(batch_df)
             
-            # 3. ANTI-BOT DELAY: Wait 2-3 seconds between batches
-            time.sleep(2.5) 
+            # ANTI-BOT DELAY: Very important for Cloud!
+            time.sleep(3) 
             progress_bar.progress((i + 1) / total_batches)
 
         except Exception as e:
-            st.warning(f"Batch {i+1} encountered an issue: {e}")
+            st.warning(f"Batch {i+1} failed: {e}")
             continue
 
     if all_jobs:
-        final_df = pd.concat(all_jobs, ignore_index=True).drop_duplicates(subset=['job_url'])
-        status_text.text(f"✅ Found {len(final_df)} unique jobs!")
+        final_df = pd.concat(all_jobs, ignore_index=True)
+        # Remove any duplicates that might have been fetched in different batches
+        final_df = final_df.drop_duplicates(subset=['job_url'])
         return final_df
     
     return None
