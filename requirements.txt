@@ -1,5 +1,6 @@
 numpy>=1.26.0
 pandas
+python-dotenv
 streamlit
 python-jobspy
 pdfplumber
