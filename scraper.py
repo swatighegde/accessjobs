@@ -4,56 +4,60 @@ import pandas as pd
 import time
 
 def fetch_jobs(search_term, location, hours_old):
+    """
+    Focused scraper for LinkedIn and Indeed.
+    Uses batching to reach ~100 results while avoiding Cloud blocks.
+    """
     is_remote = "remote" in location.lower() if location else False
-    # Glassdoor often prefers 'City, State' format over just 'City'
-    loc = location if location else "USA"
+    loc = location.lower().replace("remote", "").strip() if location else "USA"
 
-    sites = ["linkedin", "indeed", "glassdoor"]
+    # Restricted to the two most reliable sources for Cloud deployment
+    sites = ["linkedin", "indeed"]
     all_jobs = []
     
-    # We'll stick to a slightly smaller batch for Cloud stability
+    # Batching logic: 4 batches of 25 = 100 results
     results_per_batch = 25
-    total_batches = 3 # Aiming for ~75-100 results
+    total_batches = 4
 
     progress_bar = st.progress(0)
+    status_text = st.empty()
 
     for i in range(total_batches):
-        for site in sites:
-            try:
-                # We scrape one site at a time to prevent one site's 403 
-                # from killing the entire batch
-                batch_df = scrape_jobs(
-                    site_name=[site],
-                    search_term=search_term,
-                    location=loc,
-                    results_wanted=results_per_batch,
-                    offset=i * results_per_batch,
-                    hours_to_look_back=hours_old,
-                    is_remote=is_remote,
-                    enforce_desktop_browser=True,
-                    # Glassdoor is sensitive; we increase timeout specifically for it
-                    timeout=40 if site == "glassdoor" else 25
-                )
+        status_text.text(f"🚀 Fetching batch {i+1} of {total_batches}...")
+        
+        try:
+            # We scrape both sites together in this version for speed
+            batch_df = scrape_jobs(
+                site_name=sites,
+                search_term=search_term,
+                location=loc,
+                results_wanted=results_per_batch,
+                offset=i * results_per_batch,
+                hours_to_look_back=hours_old,
+                is_remote=is_remote,
+                enforce_desktop_browser=True, # Critical for LinkedIn on Cloud
+                timeout=30
+            )
 
-                if batch_df is not None and not batch_df.empty:
-                    all_jobs.append(batch_df)
-                
-                # Small sleep between SITES to avoid triggering Cloudflare
-                time.sleep(1.5)
+            if batch_df is not None and not batch_df.empty:
+                all_jobs.append(batch_df)
+            
+            # Anti-bot delay: Prevents the server from being flagged as a scraper
+            time.sleep(2.5) 
+            progress_bar.progress((i + 1) / total_batches)
 
-            except Exception as e:
-                # If Glassdoor fails, we don't want to stop LinkedIn/Indeed
-                if "glassdoor" in site.lower():
-                    print(f"Glassdoor still blocking: {e}")
-                continue
+        except Exception as e:
+            # Log the error to the console but don't crash the app
+            print(f"Batch {i+1} skip: {e}")
+            continue
 
-        # Progress update after each full batch cycle
-        progress_bar.progress((i + 1) / total_batches)
-        # Larger delay between BATCHES
-        time.sleep(2)
+    status_text.empty()
 
     if all_jobs:
+        # Combine batches and remove duplicates based on the URL
         final_df = pd.concat(all_jobs, ignore_index=True)
-        return final_df.drop_duplicates(subset=['job_url'])
+        final_df = final_df.drop_duplicates(subset=['job_url'])
+        st.sidebar.success(f"✅ Found {len(final_df)} unique jobs!")
+        return final_df
     
     return None
