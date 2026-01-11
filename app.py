@@ -47,7 +47,7 @@ with st.sidebar:
     
     search_term = st.text_input("Job Title / Keywords", placeholder="e.g. Data Scientist, Ml Engineer")
     location = st.text_input("Location", placeholder="e.g. Plano, Chicago or Remote")
-    hours_old = st.selectbox("Posted Within", [2, 4, 8, 12, 24, 48], index=1)
+    hours_old = st.selectbox("Posted Within", [ 24, 48, 72], index=1)
     
     st.divider()
     st.header("📄 Your Profile")
@@ -67,8 +67,8 @@ if search_button:
     with st.spinner("Step 1: Parsing Resume..."):
         st.session_state.resume_text = extract_resume_text(resume_file)
 
-    with st.spinner("Step 2: Sceaching Jobs "):
-        jobs_df = fetch_jobs(search_term, location, hours_old)
+    with st.spinner("Step 2: Searching Jobs "):
+        jobs_df = fetch_jobs(search_term, location, int(hours_old))
 
     if jobs_df is not None and not jobs_df.empty:
         with st.spinner("Step 3: Calculating Fit Scores..."):
