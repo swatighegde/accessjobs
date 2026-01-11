@@ -21,6 +21,9 @@ client = Groq(api_key=api_key) if api_key else None
 def get_interview_questions(job_description):
     if not client:
         return {"error": "GROQ_API_KEY not found."}
+    
+    # Ensure job_description is a safe string
+    job_description = str(job_description) if job_description else "No description provided."
 
     try:
         # 1.  PROMPT: Specific instructions for escaping code
@@ -31,6 +34,8 @@ def get_interview_questions(job_description):
         - Output MUST be valid JSON.
         - For 'coding' answers, use plain text or escaped characters. 
         - DO NOT use actual newlines (\n) inside JSON strings; use the literal string "\\n" instead.
+        - For coding answers, DO NOT use actual backslashes. Use text descriptions or very simple logic.
+        - Replace all double quotes inside answers with single quotes to avoid breaking JSON.
         
         REQUIREMENTS:
         1. 6 Theory Questions (Fundamentals, definitions, comparisons)
@@ -63,11 +68,15 @@ def get_interview_questions(job_description):
 
         # 2. SANITIZATION LAYER: Fixes common LLM-to-JSON formatting blunders
         response_text = re.sub(r'^```json\s*|```$', '', response_text, flags=re.MULTILINE)
+        
+        response_text = "".join(char for char in response_text if ord(char) >= 32 or char in "\n\r\t")
 
         return json.loads(response_text)
 
-    except json.JSONDecodeError as e:
-
-        return {"error": "The AI produced complex code that broke the format. Please refresh to try again."}
+    except json.JSONDecodeError:
+        return {"error": "JSON structure was corrupted by special characters. Try refreshing."}
     except Exception as e:
-        return {"error": f"API Error: {str(e)}"}
+
+        if "400" in str(e):
+            return {"error": "The job description contains complex symbols that the AI couldn't process into JSON. Try a different job."}
+        return {"error": f"Technical Error: {str(e)}"}
