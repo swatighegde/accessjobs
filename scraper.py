@@ -9,63 +9,63 @@ keywords, location, and the post date (hours old).
 import streamlit as st
 from jobspy import scrape_jobs
 import pandas as pd
-import time
+from datetime import datetime, timedelta, timezone
+from concurrent.futures import ThreadPoolExecutor
+
+def fetch_single_batch(site, search_term, location, offset, is_remote):
+    """Fetches a specific 'page' of results to maximize job count."""
+    try:
+        return scrape_jobs(
+            site_name=[site],
+            search_term=search_term,
+            location=location,
+            results_wanted=500, 
+            offset=offset,
+            hours_old=72,  
+            is_remote=is_remote,
+            enforce_desktop_browser=True,
+            timeout=50
+        )
+    except:
+        return pd.DataFrame()
 
 def fetch_jobs(search_term, location, hours_old):
-    """
-    Focused scraper for LinkedIn and Indeed.
-    Uses batching to reach ~100 results while avoiding Cloud blocks.
-    """
     is_remote = "remote" in location.lower() if location else False
     loc = location.lower().replace("remote", "").strip() if location else "USA"
-
-    # Restricted to the two most reliable sources for Cloud deployment
-    sites = ["linkedin", "indeed"]
-    all_jobs = []
     
-    # Batching logic: 4 batches of 25 = 100 results
-    results_per_batch = 25
-    total_batches = 4
+    all_dfs = []
+    status = st.empty()
+    status.info(f"🚀 Deep-scanning {search_term} in {loc} (Last {hours_old}h)...")
 
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-
-    for i in range(total_batches):
-        status_text.text(f"🚀 Fetching batch {i+1} of {total_batches}...")
+    # 1. DEEP-DIVE BATCHING: Parallelize 3 pages per site (6 total requests at once)
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        tasks = []
+        for site in ["linkedin", "indeed"]:
+            for offset in [0, 25, 50]: # Offset forces the site to show more than the 'sample'
+                tasks.append(executor.submit(fetch_single_batch, site, search_term, loc, offset, is_remote))
         
-        try:
-            # We scrape both sites together in this version for speed
-            batch_df = scrape_jobs(
-                site_name=sites,
-                search_term=search_term,
-                location=loc,
-                results_wanted=results_per_batch,
-                offset=i * results_per_batch,
-                hours_to_look_back=hours_old,
-                is_remote=is_remote,
-                enforce_desktop_browser=True, # Critical for LinkedIn on Cloud
-                timeout=30
-            )
+        for future in tasks:
+            res = future.result()
+            if not res.empty:
+                all_dfs.append(res.dropna(axis=1, how='all'))
 
-            if batch_df is not None and not batch_df.empty:
-                all_jobs.append(batch_df)
-            
-            # Anti-bot delay: Prevents the server from being flagged as a scraper
-            time.sleep(2.5) 
-            progress_bar.progress((i + 1) / total_batches)
+    status.empty()
+    if not all_dfs: return None
 
-        except Exception as e:
-            # Log the error to the console but don't crash the app
-            print(f"Batch {i+1} skip: {e}")
-            continue
+    # 2. CONSOLIDATE & NORMALIZE
+    df = pd.concat(all_dfs, ignore_index=True).drop_duplicates(subset=['job_url'])
+    df['date_posted'] = pd.to_datetime(df['date_posted'], errors='coerce', utc=True)
+    df = df.dropna(subset=['date_posted'])
 
-    status_text.empty()
+    # 3. RUTHLESS TIME FILTER
+    # Since the site only likes '72h', take the 72h data and 
+    # manually throw away anything that doesn't fit  24h/48h request.
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=int(hours_old))
+    final_df = df[df['date_posted'] >= cutoff].copy()
 
-    if all_jobs:
-        # Combine batches and remove duplicates based on the URL
-        final_df = pd.concat(all_jobs, ignore_index=True)
-        final_df = final_df.drop_duplicates(subset=['job_url'])
-        st.sidebar.success(f"✅ Found {len(final_df)} unique jobs!")
-        return final_df
+    # 4. FINAL SORT
+    if final_df.empty:
+        return df.sort_values(by='date_posted', ascending=False).head(65)
     
-    return None
+    return final_df.sort_values(by='date_posted', ascending=False)
