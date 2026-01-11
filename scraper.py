@@ -58,7 +58,10 @@ def fetch_jobs(search_term, location, hours_old):
     if not all_dfs: return None
 
     # 2. CONSOLIDATE & NORMALIZE
-    df = pd.concat(all_dfs, ignore_index=True).drop_duplicates(subset=['job_url'])
+    df = pd.concat(all_dfs, ignore_index=True)
+    df['description'] = df['description'].astype(str).replace(['nan', 'None', 'NoneType'], '')
+    
+    # Standardize dates
     df['date_posted'] = pd.to_datetime(df['date_posted'], errors='coerce', utc=True)
     df = df.dropna(subset=['date_posted'])
 
