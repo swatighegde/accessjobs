@@ -95,12 +95,12 @@ if search_button:
     else:
         st.session_state.jobs_list = []
         st.error("No jobs found. Try expanding your search criteria.")
-
+        
 # --- Logic: Display Job Listings ---
 if st.session_state.jobs_list:
     st.success(f"Found {len(st.session_state.jobs_list)} jobs matching your profile.")
     
-    for job in st.session_state.jobs_list:
+    for idx, job in enumerate(st.session_state.jobs_list):
         with st.container(border=True):
             # 1. Title
             st.subheader(f"💼 {job['title']}")
@@ -128,14 +128,19 @@ if st.session_state.jobs_list:
             
             # Button 2: Match Analysis    
             with col_match:
-                btn_key = f"btn_{job['id']}"
+                # FIX 2: Create a unique button key using the index
+                btn_key = f"btn_match_{idx}_{job['id']}"
                 if st.button("✨ Job Match Analysis", key=btn_key, use_container_width=True):
                     with st.spinner("Analyzing Job ..."):
+                   
+                        job_desc = str(job.get("description", ""))
+                        
                         matched, missing, tip = get_match_details(
                             st.session_state.resume_text, 
-                            job["description"]
+                            job_desc
                         )
-                        st.session_state[f"details_{job['id']}"] = {
+                        # Store in session state using a unique key
+                        st.session_state[f"details_{idx}_{job['id']}"] = {
                             "matched": matched, 
                             "missing": missing,
                             "tip": tip
@@ -143,46 +148,58 @@ if st.session_state.jobs_list:
                         
             # Button 3: Interview Prep
             with col_interview:
-                btn_key_int = f"int_{job['id']}"
+      
+                btn_key_int = f"btn_int_{idx}_{job['id']}"
                 if st.button("🎤 Interview Q&A", key=btn_key_int, use_container_width=True):
                     with st.spinner("Generating Interview Question and Answer..."):
-                        qna_data = get_interview_questions(job["description"])
-                        st.session_state[f"interview_{job['id']}"] = qna_data
-                    # Clear match state if interview is clicked
-                    if f"match_{job['id']}" in st.session_state:
-                        del st.session_state[f"match_{job['id']}"]
+                        job_desc = str(job.get("description", ""))
+                        qna_data = get_interview_questions(job_desc)
+                        st.session_state[f"interview_{idx}_{job['id']}"] = qna_data
+                    
+                    # Clear match state if interview is clicked (using unique key)
+                    match_key = f"details_{idx}_{job['id']}"
+                    if match_key in st.session_state:
+                        del st.session_state[match_key]
 
             # --- DISPLAY: Match Analysis ---
-            data_key = f"details_{job['id']}"
+            data_key = f"details_{idx}_{job['id']}"
             if data_key in st.session_state:
                 details = st.session_state[data_key]
                 st.markdown("---")
                 st.markdown("### 🔍 Semantic Gap Analysis")
                 
                 st.markdown("#### ✅ Relevant Skills")
-                for m in details["matched"]:
-                    st.write(m if "✅" in m else f"✅ {m}")
+                # Ensure details list exists and is not empty
+                matched_list = details.get("matched", [])
+                if matched_list:
+                    for m in matched_list:
+                        st.write(m if "✅" in m else f"✅ {m}")
+                else:
+                    st.write("No specific matches found.")
                 
                 st.write("") 
 
                 st.markdown("#### ❌ Missing")
-                for g in details["missing"]:
-                    st.write(g if "❌" in g else f"❌ {g}")
+                missing_list = details.get("missing", [])
+                if missing_list:
+                    for g in missing_list:
+                        st.write(g if "❌" in g else f"❌ {g}")
+                else:
+                    st.write("No missing skills identified.")
                 
                 st.info(f"💡 **Tailoring Tip:** {details['tip']}")
 
 
             # --- DISPLAY: Interview Q&A ---
-            int_key = f"interview_{job['id']}"
+            int_key = f"interview_{idx}_{job['id']}"
             if int_key in st.session_state:
                 qna = st.session_state[int_key]
                 
-                # FIX: Show the specific error message to debug
-                if "error" in qna:
+                if isinstance(qna, dict) and "error" in qna:
                     st.error(f"⚠️ Error: {qna['error']}")
                 else:
                     st.markdown("---")
-                    st.markdown("### 🎤 Interview Preperation Q&A")
+                    st.markdown("### 🎤 Interview Preparation Q&A")
                     
                     with st.expander("📘 Theory Questions (6)", expanded=True):
                         for i, item in enumerate(qna.get("theory", []), 1):
