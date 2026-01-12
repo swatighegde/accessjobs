@@ -1,9 +1,9 @@
 """
-fit_score.py
+match_details.py
 -----------
-Uses the Groq API (or Gemini) to perform a high-level comparison 
-between the resume text and a job description. It returns a 
-numerical score from 1-10 representing the profile fit.
+Performs a deep semantic gap analysis using the Groq Llama 3.3 model.
+It identifies specific qualifications found in the resume and 
+highlights missing requirements, providing evidence for each.
 """
 
 import os
