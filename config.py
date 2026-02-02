@@ -5,8 +5,8 @@
 JOB_SOURCES = ["linkedin", "indeed"]
 
 # Maximum number of jobs to fetch per search
-MAX_JOBS = 100
+MAX_JOBS = 500
 
 # Default job age filter (in hours)
-DEFAULT_HOURS_OLD = 24
+DEFAULT_HOURS_OLD = 72
 
